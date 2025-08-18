@@ -8,6 +8,10 @@ import (
 	"time"
 	"os/exec"
 	"fmt"
+	"bytes"
+	"os"
+	"encoding/json"
+	"io"
 	"sync"
 	"net/http"
 	"mime/multipart"
@@ -24,11 +28,11 @@ var (
 )
 
 
-
 func recordAudio() {
 	fmt.Println("Recording Audio")
-	cmd := exec.Command("rec", "input.wav", "gain +10", "silence", "1", "0.5", "2%", "1", "2.0", "5%")
+	cmd := exec.Command("rec", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "4%","-p","2")
 	if err := cmd.Run(); err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
 }
@@ -43,27 +47,24 @@ func mustGetPin(name string) gpio.PinIO {
 }
 
 func stopMotors() {
-        if err := mouth1.Out(gpio.Low) err != nil {
+        if err := mouth1.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find mouth1")
         }
-        if err := mouth2.Out(gpio.Low) err != nil {
+        if err := mouth2.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find mouth2")
         }
-        if err := head1.Out(gpio.Low) err != nil {
+        if err := head1.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find head1")
         }
-        if err := head2.Out(gpio.Low) err != nil {
+        if err := head2.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find head2")
         }
-        if err := tail1.Out(gpio.Low) err != nil {
+        if err := tail1.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find tail1")
         }
-        if err := tail2.Out(gpio.Low) err != nil {
+        if err := tail2.Out(gpio.Low); err != nil {
                 fmt.Println("Cant find tail2")
         }
-
-
-
 }
 
 func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
@@ -71,15 +72,17 @@ func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	fmt.Println("playing audio")
 	cmd := exec.Command("aplay",file)
 	if err := cmd.Run(); err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
 	defer close(done)
 }
 
-func generatePrompt (audio_path string) {
-	transcribeUrl := "***REMOVED***:5000/transcribe"
+func generatePrompt (audio_path string) string {
+	transcribeUrl := "http://***REMOVED***:5000/transcribe"
 	file,err :=os.Open(audio_path)
 	if err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
 	defer file.Close()
@@ -87,26 +90,90 @@ func generatePrompt (audio_path string) {
 	writer := multipart.NewWriter(&requestBody)
 	part, err := writer.CreateFormFile("audio",audio_path)
 	if err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
-	_,err = io.copy(part,file)
+	_,err = io.Copy(part,file)
 	if err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
 	writer.Close()
 	req, err  := http.NewRequest("POST", transcribeUrl, &requestBody)
 	if err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
-	req.Header.Set("Conent-Type",writer.FormDataContentType())
+	req.Header.Set("Content-Type",writer.FormDataContentType())
 	client :=&http.Client{}
-	resp, err != client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
+		stopMotors()
 		log.Fatal(err)
 	}
-	defer prompt.Body.Close()
+	defer resp.Body.Close()
 	prompt, err := io.ReadAll(resp.Body)
-	return string(body)
+	return string(prompt)
+}
+
+func generateResponse(prompt string) string {
+	url := "http://***REMOVED***:5000/ai"
+	payload,err := json.Marshal(map[string]string{"prompt":prompt,})
+	if err != nil {
+		stopMotors()
+		log.Fatal(err)
+	}
+	req,err :=http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	if err != nil { 
+		stopMotors()
+		log.Fatal(err)
+	}
+	req.Header.Set("Content-Type","application/json")
+
+	client := &http.Client{}
+	resp,err := client.Do(req)
+	if err != nil{
+		stopMotors()
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	response, err := io.ReadAll(resp.Body)
+	return string(response)
+
+}
+
+func tts(response string) {
+	url := "http://***REMOVED***:5000/tts"
+        payload,err := json.Marshal(map[string]string{"text":response,})
+        if err != nil {
+                stopMotors()
+                log.Fatal(err)
+        }
+        req,err :=http.NewRequest("POST", url, bytes.NewBuffer(payload))
+        if err != nil { 
+                stopMotors()
+                log.Fatal(err)
+        }
+        req.Header.Set("Content-Type","application/json")
+
+        client := &http.Client{}
+        resp,err := client.Do(req)
+        if err != nil{
+                stopMotors()
+                log.Fatal(err)
+        }
+        defer resp.Body.Close()
+        //audio, err := io.ReadAll(resp.Body)
+	output,err := os.Create("output.wav")
+	if err != nil {
+		stopMotors()
+		log.Fatal(err)
+	}
+	defer output.Close()
+	if _,err := io.Copy(output,resp.Body); err != nil {
+		stopMotors()
+		log.Fatal(err)
+	}
 }
 
 func moveHeadOut() {
@@ -238,13 +305,18 @@ func main() {
 	mouth2 = mustGetPin("24")
 	tail1 = mustGetPin("5")
 	tail2 = mustGetPin("6")
+	defer stopMotors()
 	moveHeadOut()
 	recordAudio()
 	moveHeadIn()
-	fmt.Println(generatePrompt("input.wav"))
+	prompt := generatePrompt("input.wav")
+	fmt.Println(prompt)
+	response := generateResponse(prompt)
+	fmt.Println(response)
+	tts(response)
 	done := make(chan struct{})
 	wg.Add(3)
-	go playaudio(done,"input.wav",&wg)
+	go playaudio(done,"output.wav",&wg)
 	go moveMouth(done,&wg)
 	go moveTail(done,&wg)
 	wg.Wait()
