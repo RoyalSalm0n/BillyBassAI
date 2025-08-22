@@ -12,6 +12,8 @@ import (
 	"os"
 	"encoding/json"
 	"io"
+	"syscall"
+	"os/signal"
 	"sync"
 	"net/http"
 	"mime/multipart"
@@ -29,9 +31,20 @@ var (
 
 
 func recordAudio() {
+	cmd := exec.Command("pkill", "-f", "arecord")
+	cmd.Run()
+	cmd = exec.Command("pulseaudio","-k")
+	cmd.Run()
+	cmd = exec.Command("pkill", "-f", "porcupine")
+	cmd.Run()
+	time.Sleep(300 * time.Millisecond)
 	fmt.Println("Recording Audio")
-	cmd := exec.Command("rec", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "4%","-p","2")
+	cmd = exec.Command("sox", "-t","alsa", "plughw:2,0", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "4%")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		fmt.Println(stderr.String())
 		stopMotors()
 		log.Fatal(err)
 	}
@@ -70,8 +83,12 @@ func stopMotors() {
 func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	defer wg.Done()
 	fmt.Println("playing audio")
-	cmd := exec.Command("aplay",file)
+	cmd := exec.Command("aplay","-D","plughw:0,0",file)
+	var stdout, stderr bytes.Buffer
+        cmd.Stdout = &stdout
+        cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		fmt.Println(stderr.String())
 		stopMotors()
 		log.Fatal(err)
 	}
@@ -305,8 +322,20 @@ func main() {
 	mouth2 = mustGetPin("24")
 	tail1 = mustGetPin("5")
 	tail2 = mustGetPin("6")
+	
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		fmt.Println("\nCaught interrupt! Stopping motors and exiting...")
+		stopMotors()
+		os.Exit(0) // Important: skip defers, so call stopMotors explicitly
+	}()
+
 	defer stopMotors()
+	stopMotors()
 	moveHeadOut()
+	fmt.Print("moving head")
 	recordAudio()
 	moveHeadIn()
 	prompt := generatePrompt("input.wav")
@@ -316,7 +345,7 @@ func main() {
 	tts(response)
 	done := make(chan struct{})
 	wg.Add(3)
-	go playaudio(done,"output.wav",&wg)
+	go playaudio(done,"/home/pi/billybass/output.wav",&wg)
 	go moveMouth(done,&wg)
 	go moveTail(done,&wg)
 	wg.Wait()
