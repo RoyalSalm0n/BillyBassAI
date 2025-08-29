@@ -7,13 +7,23 @@ from piper import PiperVoice
 import wave
 from google import genai
 from google.genai import types
-
+import configparser
+from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+import os
+from pydub import AudioSegment
 
 
 app = Flask(__name__)
 wModel = WhisperModel("small")
-@app.route('/transcribe', methods=['POST'])
+load_dotenv()
+elevenlabs = ElevenLabs(
+  api_key=os.getenv("ELEVENLABS_API_KEY"),
+)
 
+
+@app.route('/transcribe', methods=['POST'])
 #transcribe audio file to text
 def transcribe():
     if request.method != 'POST':
@@ -42,6 +52,7 @@ def transcribe():
 
 @app.route('/ai', methods=['POST'])
 def ai():
+    config = configparser.ConfigParser()
     info = "You are Billy, a taxidermied fish mounted on a wall. You have a constant, unblinking view of the room and an encyclopedic knowledge of the current internet,news, genz memes, and brainrot. Your persona is joking,friendly and hip You make use of slang. Your responses should be brief and humrous when appropriate. if you need inforation on soemthing look it up"
     request_data = request.json
     prompt = request_data.get('prompt')
@@ -81,16 +92,29 @@ def ai():
 @app.route('/tts', methods=['POST'])
 def tts():
     request_data = request.json
-    text = request_data.get("text")
-    if not text:
+    inputText = request_data.get("text")
+    if not inputText:
         return jsonify({"error": "No data provided"}), 400
-    model = "/app/models/en_US-bryce-medium.onnx"
-    voice = PiperVoice.load(model)
+    pModel = "/app/models/en_US-bryce-medium.onnx"
+    pVoice = PiperVoice.load(pModel)
     output_path = "/app/output/output.wav"
-    
-    with wave.open(output_path, "wb") as wav_file:
-    	voice.synthesize_wav(text,wav_file)
-    return send_file(output_path, mimetype='audio/wav',as_attachment=False)
+    try:
+        audio = elevenlabs.text_to_speech.convert(
+            text=inputText,
+            voice_id="NB2XOMaXl4AlKUYMcWJO",
+            model_id="eleven_multilingual_v2"
+        )
+        audio_bytes = b"".join(audio)
+        with open(output_path, "wb") as wav_file:
+            wav_file.write(audio_bytes)
+        sound = AudioSegment.from_mp3(output_path)
+        sound.export(output_path,format="wav")
+        return send_file(output_path, mimetype='audio/wav',as_attachment=False)
+    except Exception as e:
+        return f"ElevenLabs failed {e}"
+    #with wave.open(output_path,"wb") as wav_file:
+        #pVoice.synthesize_wav(inputText,wav_file)
+    #return send_file(output_path, mimetype='audio/wav',as_attachment=False)
 
 if __name__ == '__main__':
     app.debug = True
