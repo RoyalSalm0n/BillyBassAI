@@ -1,4 +1,6 @@
 venv/
-env
-./venv
-./billy
+env/
+/billy
+*.log
+*.wav
+motorcontrol/killmotorsy

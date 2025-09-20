@@ -20,7 +20,10 @@ import (
 	//github.com/gordonklaus/portaudio
 )
 
+//Get server IP from local ENV variable
+var server string= os.Getenv("server")
 
+//predefine motor gpios
 var (
 	head1  gpio.PinIO
 	head2  gpio.PinIO
@@ -31,17 +34,24 @@ var (
 )
 
 
+
+
+//record the audio being asked by billy
 func recordAudio() {
+	//kill any possible procesess that could interfere with sox
 	cmd := exec.Command("pkill", "-f", "arecord")
 	cmd.Run()
 	cmd = exec.Command("pulseaudio","-k")
 	cmd.Run()
 	cmd = exec.Command("pkill", "-f", "porcupine")
 	cmd.Run()
+
 	time.Sleep(300 * time.Millisecond)
 	fmt.Println("Recording Audio")
-	cmd = exec.Command("sox", "-t","alsa", "plughw:2,0", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "4%")
+	//record using with +20 gain, when audio above 1% is detected for 0.1s and stop recording when audio is below 10% for 2s 
+	cmd = exec.Command("sox", "-t","alsa", "plughw:Microphone", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "10%")
 	var stdout, stderr bytes.Buffer
+	//capture standard out and standard err
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -52,6 +62,7 @@ func recordAudio() {
 }
 
 
+// helper fucnction to get pin on raspberry pi
 func mustGetPin(name string) gpio.PinIO {
 	pin := gpioreg.ByName(name)
 	if pin == nil {
@@ -59,6 +70,7 @@ func mustGetPin(name string) gpio.PinIO {
 	}
 	return pin
 }
+
 
 func stopMotors() {
         if err := mouth1.Out(gpio.Low); err != nil {
@@ -81,6 +93,7 @@ func stopMotors() {
         }
 }
 
+// play audio using aplay
 func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	defer wg.Done()
 	fmt.Println("playing audio")
@@ -91,13 +104,16 @@ func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	if err := cmd.Run(); err != nil {
 		fmt.Println(stderr.String())
 		stopMotors()
+		close(done)
 		log.Fatal(err)
 	}
 	defer close(done)
 }
 
+
+
 func generatePrompt (audio_path string) string {
-	transcribeUrl := "http://***REMOVED***:5000/transcribe"
+	transcribeUrl := server+"/transcribe"
 	file,err :=os.Open(audio_path)
 	if err != nil {
 		stopMotors()
@@ -135,7 +151,7 @@ func generatePrompt (audio_path string) string {
 }
 
 func generateResponse(prompt string) string {
-	url := "http://***REMOVED***:5000/ai"
+	url := server+"/ai"
 	payload,err := json.Marshal(map[string]string{"prompt":prompt,})
 	if err != nil {
 		stopMotors()
@@ -161,7 +177,7 @@ func generateResponse(prompt string) string {
 }
 
 func tts(response string) {
-	url := "http://***REMOVED***:5000/tts"
+	url := server+"/tts"
         payload,err := json.Marshal(map[string]string{"text":response,})
         if err != nil {
                 stopMotors()
@@ -220,9 +236,9 @@ func moveHeadIn() {
         if err := head1.Out(gpio.Low); err != nil {
                 log.Fatal(err)
         }
-        if err := head2.Out(gpio.High); err != nil {
-                log.Fatal(err)
-        }
+        //if err := head2.Out(gpio.High); err != nil {
+                //log.Fatal(err)
+        //)
 	if err:= head2.Out(gpio.Low); err!=nil {
 		log.Fatal(err)
 	}
@@ -323,14 +339,13 @@ func main() {
 	mouth2 = mustGetPin("24")
 	tail1 = mustGetPin("5")
 	tail2 = mustGetPin("6")
-	
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigs
 		fmt.Println("\nCaught interrupt! Stopping motors and exiting...")
 		stopMotors()
-		os.Exit(0) // Important: skip defers, so call stopMotors explicitly
+		os.Exit(0)
 	}()
 
 	defer stopMotors()

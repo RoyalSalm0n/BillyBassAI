@@ -3,13 +3,15 @@ import subprocess
 from pvrecorder import PvRecorder
 import struct
 import time
+import os
 
 
 def main():
 	porcupine = pvporcupine.create(
-	access_key="***REMOVED***",
+	access_key=str(os.getenv('porcupine')),
 	keyword_paths=["/home/pi/billybass/Hey-Billy_en_raspberry-pi_v3_0_0.ppn"]
 	)
+	print(porcupine)
 	time.sleep(2)
 	arecord_proc = subprocess.Popen(
 		["arecord","-D","plughw:CARD=Microphone","-f","S16_LE","-r","16000","-c","1","-t","raw"],
