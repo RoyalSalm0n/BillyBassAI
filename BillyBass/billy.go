@@ -361,7 +361,7 @@ func main() {
 	tts(response)
 	done := make(chan struct{})
 	wg.Add(3)
-	go playaudio(done,"/home/pi/billybass/output.wav",&wg)
+	go playaudio(done,"/home/pi/billybass/BillyBass/output.wav",&wg)
 	go moveMouth(done,&wg)
 	go moveTail(done,&wg)
 	wg.Wait()
