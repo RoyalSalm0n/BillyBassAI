@@ -1,4 +1,5 @@
-venv/
+.venv/
+.pv/
 env/
 /billy
 *.log
