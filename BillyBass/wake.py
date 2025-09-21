@@ -9,7 +9,7 @@ import os
 def main():
 	porcupine = pvporcupine.create(
 	access_key=str(os.getenv('porcupine')),
-	keyword_paths=["/home/pi/billybass/Hey-Billy_en_raspberry-pi_v3_0_0.ppn"]
+	keyword_paths=["/home/pi/billybass/BillyBass/Hey-Billy_en_raspberry-pi_v3_0_0.ppn"]
 	)
 	print(porcupine)
 	time.sleep(2)
@@ -31,7 +31,7 @@ def main():
 			if keyword_index >= 0:
 				arecord_proc.terminate()
 				arecord_proc.wait()
-				result = subprocess.run(["/home/pi/billybass/billy"], capture_output=True, text=True)
+				result = subprocess.run(["/home/pi/billybass/BillyBass/billy"], capture_output=True, text=True)
 				with open("/home/pi/billybass/go_stdout.log", "a") as f:
     					f.write("stdout:\n" + result.stdout + "\n")
     					f.write("stderr:\n" + result.stderr + "\n")
