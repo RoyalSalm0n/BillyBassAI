@@ -1,0 +1,5 @@
+venv/
+*.mp3
+*.log
+*.wav
+configs/gemini_config.ini
