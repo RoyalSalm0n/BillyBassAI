@@ -5,3 +5,4 @@ env/
 *.log
 *.wav
 motorcontrol/killmototrs
+.config/
