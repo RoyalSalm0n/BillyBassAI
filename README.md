@@ -1,8 +1,10 @@
 # BillyBassAI
-AI-powered BillyBass singing Fish
+BillyBassAI is an old Billy Bass Singing Fish Toy that I retrofitted into a AI-powered chatbot. It uses voice to text transctiption, AI repsonse generation and TTS generation. 
+
 
 # Tech-Stack
-BillyBass: Go, Sox (recording audio), 
+BillyBass: Go, Sox (audio input)
+
 API: Python, Flask, Whisper, Google Gemini, PiperTTS, ElevenLabs 
 
 # Demo
