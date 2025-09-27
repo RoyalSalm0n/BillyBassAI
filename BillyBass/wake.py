@@ -32,7 +32,7 @@ def main():
 				arecord_proc.terminate()
 				arecord_proc.wait()
 				result = subprocess.run(["/home/pi/billybass/BillyBass/billy"], capture_output=True, text=True)
-				with open("/home/pi/billybass/go_stdout.log", "a") as f:
+				with open("/home/pi/billybass/BillyBass/go_stdout.log", "a") as f:
     					f.write("stdout:\n" + result.stdout + "\n")
     					f.write("stderr:\n" + result.stderr + "\n")
 				print("stdout:", result.stdout)
