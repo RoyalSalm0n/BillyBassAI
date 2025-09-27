@@ -53,30 +53,30 @@ def transcribe():
 
 @app.route('/ai', methods=['POST'])
 def ai():
-    config = configparser.ConfigParser()
-    info_lines = []
-    config.read("/app/configs/gemini_config.ini")
-    for s in config.sections():
-        info_lines.append(f"[{s}]")
-        for key,value in config.items(s):
-            info_lines.append(f"{key} = {value}")
-    info = "\n".join(info_lines)
+    info = "\n"
+    with open("config.txt") as f:
+        info = info + f.read()
     request_data = request.json
     prompt = request_data.get('prompt')
     Localurl = "http://ollama:11434/api/generate"
     Localheader = {"Content-Type": "application/json"}
     client = genai.Client(http_options=types.HttpOptions(api_version='v1alpha'))
+    grounding_tool = types.Tool(
+        google_search=types.GoogleSearch()
+    )
+    config = types.GenerateContentConfig(
+        system_instruction=info,
+        tools=[grounding_tool]
+    )
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
     try: 
     	response = client.models.generate_content(
     		model='gemini-2.5-flash',
     		contents=prompt,
-    		config=types.GenerateContentConfig(
-                system_instruction=info,
-              ),
+    		config=config,
         )
-    	text = re.sub(r"[^A-Za-z0-9 ]", "", response.text)
+    	text = re.sub(r"[^?!.,'A-Za-z0-9 ]", "", response.text)
     	return text
     except Exception as e:
     	print(f"Gemini failed: {e}")
