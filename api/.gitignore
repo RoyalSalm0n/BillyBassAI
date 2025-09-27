@@ -2,4 +2,4 @@ venv/
 *.mp3
 *.log
 *.wav
-configs/
+config.txt
