@@ -15,6 +15,9 @@ BillyBassAI is an old Billy Bass Singing Fish Toy that I retrofitted into a AI-p
 - PiperTTS, ElevenLabs 
 
 # Demo
+https://github.com/user-attachments/assets/66f519e4-afbf-4e50-9039-24a98abedd61
+
+
 
 # Hardware list
 - Raspberry PI Zero 2W
@@ -25,6 +28,8 @@ BillyBassAI is an old Billy Bass Singing Fish Toy that I retrofitted into a AI-p
 - USB to micro USB adapter
 
 # Schematics 
+<img width="935" height="828" alt="BillyBass_diagram" src="https://github.com/user-attachments/assets/23782728-8210-498b-82e3-cdc2a4fc7118" />
+
 
 If want to build this for yourself and wnat more info or have any questions please feel free to reach out to me on <a href = "https://www.linkedin.com/in/evanwsalmon/">linkedin</a> :)
 
