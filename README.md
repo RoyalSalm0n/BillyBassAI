@@ -5,14 +5,14 @@ BillyBassAI is an old Billy Bass Singing Fish Toy that I retrofitted into a AI-p
 # Tech-Stack
 
 ### BillyBass(Hardware Control): 
-- Go,
+- Go
 - Sox (audio input)
 
 ### API & AI Processing: 
 - Python, Flask
 - Whisper(Speech-to-text)
-- Google Gemini,
-- PiperTTS, ElevenLabs 
+- Google Gemini
+- PiperTTS 
 
 # Demo
 https://github.com/user-attachments/assets/66f519e4-afbf-4e50-9039-24a98abedd61
