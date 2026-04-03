@@ -22,6 +22,7 @@ load_dotenv()
 elevenlabs = ElevenLabs(
   api_key=os.getenv("ELEVENLABS_API_KEY"),
 )
+external = False
 
 
 @app.route('/transcribe', methods=['POST'])
@@ -40,15 +41,23 @@ def transcribe():
         return jsonify({"error": "Invalid file type"}), 400
     with tempfile.NamedTemporaryFile(delete=True) as temp_file:
         audio_file.save(temp_file.name)
-        segments, info = wModel.transcribe(temp_file.name)
-        segments = list(segments)
-        result = " ".join(x.text for x in segments)
+        if not external:
+            segments, info = wModel.transcribe(temp_file.name)
+            segments = list(segments)
+            result = " ".join(x.text for x in segments)
+        else:
+            client = genai.Client()
+            myfile = client.files.upload(file=temp_file.name)
+            response = client.models.generate_content(
+                model="gemini-3-flash-preview", contents=["Transcribe this audio clip and return the transcription as plain text", myfile]
+            )
+            result = response.text
         #audio = whisper.load_audio(temp_file.name)
         #audio = whisper.pad_or_trim(audio)
         #mel = whisper.log_mel_spectrogram(audio, n_mels=Wmodel.dims.n_mels).to(Wmodel.device)
         #options = whisper.DecodingOptions()
         #result = whisper.decode(Wmodel, mel, options)
-    
+
     return result
 
 @app.route('/ai', methods=['POST'])
