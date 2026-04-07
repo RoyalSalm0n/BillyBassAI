@@ -5,10 +5,11 @@ RUN pip install --no-cache-dir --upgrade pip
 
 WORKDIR /app
 
-COPY . .
-
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir piper-tts onnxruntime-gpu
+
+COPY . .
 
 ENV PIPER_DEVICE=cuda
 
