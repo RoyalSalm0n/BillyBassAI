@@ -7,6 +7,7 @@ BillyBassAI is an old Billy Bass Singing Fish Toy that I retrofitted into a AI-p
 ### BillyBass(Hardware Control): 
 - Go
 - Sox (audio input)
+- openwakeword
 
 ### API & AI Processing: 
 - Python, Flask
