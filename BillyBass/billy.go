@@ -22,6 +22,11 @@ import (
 
 //Get server IP from local ENV variable
 var server string= os.Getenv("server")
+var auth string = os.Getenv("API_KEY")
+
+if auth == "" {
+    log.Fatal("API_KEY environment variable not set")
+}
 
 //predefine motor gpios
 var (
@@ -33,7 +38,7 @@ var (
 	tail2  gpio.PinIO
 )
 
-
+const outputPath = "/home/pi/billybass/BillyBass/output.wav"
 
 
 //record the audio being asked by billy
@@ -96,6 +101,7 @@ func stopMotors() {
 // play audio using aplay
 func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	defer wg.Done()
+	defer close(done)
 	fmt.Println("playing audio")
 	cmd := exec.Command("aplay","-D","plughw:0,0",file)
 	var stdout, stderr bytes.Buffer
@@ -104,10 +110,8 @@ func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	if err := cmd.Run(); err != nil {
 		fmt.Println(stderr.String())
 		stopMotors()
-		close(done)
 		log.Fatal(err)
 	}
-	defer close(done)
 }
 
 
@@ -139,6 +143,7 @@ func generatePrompt (audio_path string) string {
 		log.Fatal(err)
 	}
 	req.Header.Set("Content-Type",writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer " + auth)
 	client :=&http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -163,7 +168,7 @@ func generateResponse(prompt string) string {
 		log.Fatal(err)
 	}
 	req.Header.Set("Content-Type","application/json")
-
+	req.Header.Set("Authorization", "Bearer " + auth)
 	client := &http.Client{}
 	resp,err := client.Do(req)
 	if err != nil{
@@ -189,7 +194,7 @@ func tts(response string) {
                 log.Fatal(err)
         }
         req.Header.Set("Content-Type","application/json")
-
+	req.Header.Set("Authorization", "Bearer " + auth)
         client := &http.Client{}
         resp,err := client.Do(req)
         if err != nil{
@@ -198,7 +203,7 @@ func tts(response string) {
         }
         defer resp.Body.Close()
         //audio, err := io.ReadAll(resp.Body)
-	output,err := os.Create("output.wav")
+	output,err := os.Create(outputPath)
 	if err != nil {
 		stopMotors()
 		log.Fatal(err)
@@ -361,15 +366,15 @@ func main() {
 	tts(response)
 	done := make(chan struct{})
 	wg.Add(3)
-	go playaudio(done,"/home/pi/billybass/BillyBass/output.wav",&wg)
+	go playaudio(done,outputPath,&wg)
 	go moveMouth(done,&wg)
 	go moveTail(done,&wg)
 	wg.Wait()
 	if err := tail1.Out(gpio.Low); err != nil {
         	 log.Fatal(err)
         }
-        if err := tail2.Out(gpio.Low); err != nil {
+       if err := tail2.Out(gpio.Low); err != nil {
         	log.Fatal(err)
-        }
+       }
 
 }
