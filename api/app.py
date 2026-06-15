@@ -14,6 +14,7 @@ from elevenlabs import play
 import os
 from pydub import AudioSegment
 import re
+from functools import wraps
 
 
 app = Flask(__name__)
@@ -22,10 +23,21 @@ load_dotenv()
 elevenlabs = ElevenLabs(
   api_key=os.getenv("ELEVENLABS_API_KEY"),
 )
+API_KEY=os.getenv("API_KEY")
 external = True
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer ") or auth_header[7:] != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 @app.route('/transcribe', methods=['POST'])
+@require_auth
 #transcribe audio file to text
 def transcribe():
     if request.method != 'POST':
@@ -63,6 +75,7 @@ def transcribe():
     return result
 
 @app.route('/ai', methods=['POST'])
+@require_auth
 def ai():
     info = "\n"
     with open("config.txt") as f:
@@ -109,6 +122,7 @@ def ai():
     	return jsonify({"error": "Both Gemini and local model failed"}), 500
 
 @app.route('/tts', methods=['POST'])
+@require_auth
 def tts():
     request_data = request.json
     inputText = request_data.get("text")
