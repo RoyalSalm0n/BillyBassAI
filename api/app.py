@@ -19,12 +19,14 @@ from functools import wraps
 
 app = Flask(__name__)
 wModel = WhisperModel("small")
+pModel = "/app/models/norman.onnx"
+pVoice = PiperVoice.load(pModel)
 load_dotenv()
 elevenlabs = ElevenLabs(
   api_key=os.getenv("ELEVENLABS_API_KEY"),
 )
 API_KEY=os.getenv("API_KEY")
-external = True
+external = False
 
 def require_auth(f):
     @wraps(f)
@@ -50,7 +52,7 @@ def transcribe():
         return jsonify({"error": "No selected file"}), 400
     if not audio_file:
         return jsonify({"error": "No file provided"}), 400
-    if not audio_file.filename.endswith(tuple(ALLOWED_EXTENSIONS):
+    if not audio_file.filename.endswith(tuple(ALLOWED_EXTENSIONS)):
         return jsonify({"error": "Invalid file type"}), 400
     ext = os.path.splitext(audio_file.filename)[1].lower()
     suffix = ext if ext in ALLOWED_EXTENSIONS else ".wav"
@@ -92,7 +94,8 @@ def ai():
     )
     config = types.GenerateContentConfig(
         system_instruction=info,
-        tools=[grounding_tool]
+        tools=[grounding_tool],
+	thinking_config=types.ThinkingConfig(thinking_budget=0)
     )
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
@@ -130,8 +133,6 @@ def tts():
     inputText = request_data.get("text")
     if not inputText:
         return jsonify({"error": "No data provided"}), 400
-    pModel = "/app/models/norman.onnx"
-    pVoice = PiperVoice.load(pModel)
     output_path = "/app/output/output.wav"
     try:
         audio = elevenlabs.text_to_speech.convert(
@@ -155,6 +156,6 @@ def tts():
 
 if __name__ == '__main__':
     app.debug = False
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, threaded=True)
 
 
