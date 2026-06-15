@@ -24,10 +24,6 @@ import (
 var server string= os.Getenv("server")
 var auth string = os.Getenv("API_KEY")
 
-if auth == "" {
-    log.Fatal("API_KEY environment variable not set")
-}
-
 //predefine motor gpios
 var (
 	head1  gpio.PinIO
@@ -48,8 +44,6 @@ func recordAudio() {
 	cmd.Run()
 	cmd = exec.Command("pulseaudio","-k")
 	cmd.Run()
-	cmd = exec.Command("pkill", "-f", "porcupine")
-	cmd.Run()
 
 	time.Sleep(300 * time.Millisecond)
 	fmt.Println("Recording Audio")
@@ -61,6 +55,7 @@ func recordAudio() {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Println(stderr.String())
+		fmt.Println("Stopping motors")
 		stopMotors()
 		log.Fatal(err)
 	}
@@ -216,19 +211,14 @@ func tts(response string) {
 }
 
 func moveHeadOut() {
-	if head1 == nil {
-		log.Fatal("Failed to find GIPO17")
-	}
-	if head2 == nil {
-		log.Fatal("Failed to find GIPO22")
-	}
-	if err := head1.Out(gpio.High); err != nil {
-		log.Fatal(err)
-	}
-	if err := head2.Out(gpio.Low); err != nil {
-		log.Fatal(err)
-	}
-
+    if head1 == nil { log.Fatal("Failed to find GPIO17") }
+    if head2 == nil { log.Fatal("Failed to find GPIO22") }
+    if err := head1.Out(gpio.Low); err != nil { log.Fatal(err) }
+    if err := head2.Out(gpio.Low); err != nil { log.Fatal(err) }
+    time.Sleep(500 * time.Millisecond)
+    fmt.Println("moving head")
+    if err := head1.Out(gpio.High); err != nil { log.Fatal(err) }
+    if err := head2.Out(gpio.Low); err != nil { log.Fatal(err) }
 }
 
 func moveHeadIn() {
@@ -238,20 +228,9 @@ func moveHeadIn() {
         if head2 == nil {
                 log.Fatal("Failed to find GIPO22")
         }
-        if err := head1.Out(gpio.Low); err != nil {
-                log.Fatal(err)
-        }
-        //if err := head2.Out(gpio.High); err != nil {
-                //log.Fatal(err)
-        //)
-	if err:= head2.Out(gpio.Low); err!=nil {
-		log.Fatal(err)
-	}
-
-
-
-
-
+	if err := head1.Out(gpio.Low); err != nil { log.Fatal(err) }
+    	if err := head2.Out(gpio.Low); err != nil { log.Fatal(err) }
+    	time.Sleep(50 * time.Millisecond)
 }
 
 
@@ -344,6 +323,9 @@ func main() {
 	mouth2 = mustGetPin("24")
 	tail1 = mustGetPin("5")
 	tail2 = mustGetPin("6")
+	if auth == "" {
+   		log.Fatal("API_KEY environment variable not set")
+	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -354,9 +336,8 @@ func main() {
 	}()
 
 	defer stopMotors()
-	stopMotors()
 	moveHeadOut()
-	fmt.Print("moving head")
+	fmt.Print("moving head\n")
 	recordAudio()
 	moveHeadIn()
 	prompt := generatePrompt("input.wav")

@@ -49,6 +49,7 @@ def main():
 						print("exit code:", result.returncode)
 					finally:
 						time.sleep(1)
+						oww_model.reset()
 						arecord_proc = subprocess.Popen(
 							["arecord","-D","plughw:CARD=Microphone","-f","S16_LE","-r","16000","-c","1","-t","raw"],
                 					stdout=subprocess.PIPE
