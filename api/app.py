@@ -40,6 +40,7 @@ def require_auth(f):
 @require_auth
 #transcribe audio file to text
 def transcribe():
+    ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.m4a'}
     if request.method != 'POST':
         return jsonify({"error": "Invalid request method"}), 405
     if 'audio' not in request.files:
@@ -49,9 +50,10 @@ def transcribe():
         return jsonify({"error": "No selected file"}), 400
     if not audio_file:
         return jsonify({"error": "No file provided"}), 400
-    if not audio_file.filename.endswith(('.wav', '.mp3', '.m4a')):
+    if not audio_file.filename.endswith(tuple(ALLOWED_EXTENSIONS):
         return jsonify({"error": "Invalid file type"}), 400
-    suffix = os.path.splitext(audio_file.filename)[1] or ".wav"
+    ext = os.path.splitext(audio_file.filename)[1].lower()
+    suffix = ext if ext in ALLOWED_EXTENSIONS else ".wav"
     with tempfile.NamedTemporaryFile(delete=True,suffix=suffix) as temp_file:
         audio_file.save(temp_file.name)
         if not external:
