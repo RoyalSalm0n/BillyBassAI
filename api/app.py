@@ -95,7 +95,9 @@ def ai():
     config = types.GenerateContentConfig(
         system_instruction=info,
         tools=[grounding_tool],
-	thinking_config=types.ThinkingConfig(thinking_budget=0)
+	thinking_config=types.ThinkingConfig(thinking_budget=0),
+	temperature=0.9,
+	max_output_tokens=150
     )
     if not prompt:
         return jsonify({"error": "No prompt provided"}), 400
@@ -105,7 +107,7 @@ def ai():
     		contents=prompt,
     		config=config,
         )
-    	text = re.sub(r"[^?!.,'A-Za-z0-9 ]", "", response.text)
+    	text = re.sub(r"[^?!.,;—'A-Za-z0-9 ]", "", response.text)
     	return text
     except Exception as e:
     	print(f"Gemini failed: {e}")
