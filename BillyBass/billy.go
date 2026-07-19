@@ -1,5 +1,4 @@
 package main
-
 import (
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
@@ -48,7 +47,7 @@ func recordAudio() {
 	time.Sleep(300 * time.Millisecond)
 	fmt.Println("Recording Audio")
 	//record using with +20 gain, when audio above 1% is detected for 0.1s and stop recording when audio is below 10% for 2s 
-	cmd = exec.Command("sox", "-t","alsa", "plughw:Microphone", "input.wav", "gain", "+20", "silence", "1", "0.1", "1%", "1", "2.0", "10%")
+	cmd = exec.Command("sox", "-t","alsa", "plughw:CARD=Microphone", "input.wav", "gain", "+1", "silence", "1", "0.1", "1%", "1", "2.0", "10%")
 	var stdout, stderr bytes.Buffer
 	//capture standard out and standard err
 	cmd.Stdout = &stdout
@@ -105,7 +104,7 @@ func playaudio(done chan struct{},file string,wg *sync.WaitGroup) {
 	if err := cmd.Run(); err != nil {
 		fmt.Println(stderr.String())
 		stopMotors()
-		log.Fatal(err)
+		return
 	}
 }
 

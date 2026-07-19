@@ -30,6 +30,12 @@ def main():
 	is_running=False
 	try:
 		while True:
+			if arecord_proc.poll() is not None:
+        			err = arecord_proc.stderr.read().decode(errors="ignore") if arecord_proc.stderr else ""
+        			print(f"arecord died unexpectedly: {err}")
+       				arecord_proc = start_arecord()
+        			oww_model.reset()
+        			continue
 			audio_frame = get_next_audio_frame()
 			if audio_frame is None:
 				continue
@@ -40,13 +46,17 @@ def main():
 					arecord_proc.terminate()
 					arecord_proc.wait()
 					try:
-						result = subprocess.run(["/home/pi/billybass/BillyBass/billy"], capture_output=True, text=True, timeout=30)
+						result = subprocess.run(["/home/pi/billybass/BillyBass/billy"], capture_output=True, text=True, timeout=90)
 						with open("/home/pi/billybass/BillyBass/go_stdout.log", "a") as f:
     							f.write("stdout:\n" + result.stdout + "\n")
     							f.write("stderr:\n" + result.stderr + "\n")
 						print("stdout:", result.stdout)
 						print("stderr:", result.stderr)
 						print("exit code:", result.returncode)
+					except subprocess.TimeoutExpired:
+    						print("billy timed out after 90s, killing any leftover processes")
+    						subprocess.run(["pkill", "-9", "-f", "/home/pi/billybass/BillyBass/billy"])
+    						subprocess.run(["pkill", "-9", "-f", "aplay"])
 					finally:
 						time.sleep(1)
 						oww_model.reset()
