@@ -18,10 +18,9 @@ import (
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/host/v3"
-	//github.com/gordonklaus/portaudio
 )
 
-// Get server IP from local ENV variable
+// Get server IP AND API KEY from local ENV variable
 var server string = os.Getenv("server")
 var auth string = os.Getenv("API_KEY")
 
@@ -43,6 +42,7 @@ var client = &http.Client{
 
 // record the audio being asked by billy
 func recordAudio() error {
+
 	//kill any possible procesess that could interfere with sox
 	cmd := exec.Command("pkill", "-f", "arecord")
 	cmd.Run()
@@ -52,6 +52,7 @@ func recordAudio() error {
 	time.Sleep(300 * time.Millisecond)
 
 	fmt.Println("Recording Audio")
+
 	//record, when audio above 1% is detected for 0.1s and stop recording when audio is below 10% for 2s
 	cmd = exec.Command("sox", "-t", "alsa", "plughw:CARD=Microphone", "input.wav", "gain", "+1", "silence", "1", "0.1", "1%", "1", "2.0", "10%")
 	var stdout, stderr bytes.Buffer
@@ -74,6 +75,7 @@ func mustGetPin(name string) (gpio.PinIO, error) {
 	return pin, nil
 }
 
+// stop all motors
 func stopMotors() {
 	if err := mouth1.Out(gpio.Low); err != nil {
 		fmt.Println("Cant find mouth1")
@@ -97,29 +99,35 @@ func stopMotors() {
 
 // play audio using aplay
 func playaudio(done chan struct{}, file string, wg *sync.WaitGroup) error {
+	// Use a WaitGroup to signal when the goroutine is done and close the done channel to stop the mouth and tail movement
 	defer wg.Done()
 	defer close(done)
+
 	fmt.Println("playing audio")
 	cmd := exec.Command("aplay", "-D", "plughw:0,0", file)
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("playaudio: %s: %w", stderr.String(), err)
 	}
 	return nil
 }
 
-func generatePrompt(audio_path string) (string, error) {
+// generate prompt from audio file using server API endpoint
+func generatePrompt(audioPath string) (string, error) {
 	transcribeUrl := server + "/transcribe"
-	file, err := os.Open(audio_path)
+	file, err := os.Open(audioPath)
 	if err != nil {
 		return "", fmt.Errorf("generatePrompt: %w", err)
 	}
 	defer file.Close()
+
 	var requestBody bytes.Buffer
 	writer := multipart.NewWriter(&requestBody)
-	part, err := writer.CreateFormFile("audio", audio_path)
+	part, err := writer.CreateFormFile("audio", audioPath)
 	if err != nil {
 		return "", fmt.Errorf("generatePrompt: %w", err)
 	}
@@ -149,6 +157,7 @@ func generatePrompt(audio_path string) (string, error) {
 	return string(prompt), nil
 }
 
+// generate a response from the prompt using the AI API
 func generateResponse(prompt string) (string, error) {
 	url := server + "/ai"
 	payload, err := json.Marshal(map[string]string{"prompt": prompt})
@@ -177,6 +186,7 @@ func generateResponse(prompt string) (string, error) {
 
 }
 
+// convert text to speech using the TTS API endpoint
 func tts(response string) error {
 	url := server + "/tts"
 	payload, err := json.Marshal(map[string]string{"text": response})
@@ -210,10 +220,10 @@ func tts(response string) error {
 
 func moveHeadOut() error {
 	if head1 == nil {
-		return fmt.Errorf("Failed to find GPIO17")
+		return fmt.Errorf("failed to find GPIO17")
 	}
 	if head2 == nil {
-		return fmt.Errorf("Failed to find GPIO22")
+		return fmt.Errorf("failed to find GPIO22")
 	}
 	if err := head1.Out(gpio.Low); err != nil {
 		return fmt.Errorf("moveHeadOut: %w", err)
@@ -234,10 +244,10 @@ func moveHeadOut() error {
 
 func moveHeadIn() error {
 	if head1 == nil {
-		return fmt.Errorf("Failed to find GIPO17")
+		return fmt.Errorf("failed to find GPIO17")
 	}
 	if head2 == nil {
-		return fmt.Errorf("Failed to find GIPO22")
+		return fmt.Errorf("failed to find GPIO22")
 	}
 	if err := head1.Out(gpio.Low); err != nil {
 		return fmt.Errorf("moveHeadIn: %w", err)
@@ -262,10 +272,10 @@ func moveMouth(done chan struct{}, wg *sync.WaitGroup) error {
 			}
 		default:
 			if mouth1 == nil {
-				return fmt.Errorf("Failed to find GPIO23")
+				return fmt.Errorf("failed to find GPIO23")
 			}
 			if mouth2 == nil {
-				return fmt.Errorf("Failed to find GPIO24")
+				return fmt.Errorf("failed to find GPIO24")
 			}
 			if err := mouth1.Out(gpio.High); err != nil {
 				return fmt.Errorf("moveMouth: %w", err)
@@ -299,10 +309,10 @@ func moveTail(done chan struct{}, wg *sync.WaitGroup) error {
 			}
 		default:
 			if tail1 == nil {
-				return fmt.Errorf("Failed to find GIPO5")
+				return fmt.Errorf("failed to find GPIO5")
 			}
 			if tail2 == nil {
-				return fmt.Errorf("Failed to find GIPO6")
+				return fmt.Errorf("failed to find GPIO6")
 			}
 			if err := tail1.Out(gpio.High); err != nil {
 				return fmt.Errorf("moveTail: %w", err)
@@ -332,32 +342,32 @@ func main() {
 	}
 	head1, err = mustGetPin("17")
 	if err != nil {
-		fmt.Println("Failed to find GPIO17")
+		fmt.Println("failed to find GPIO17")
 		os.Exit(1)
 	}
 	head2, err = mustGetPin("22")
 	if err != nil {
-		fmt.Println("Failed to find GPIO22")
+		fmt.Println("failed to find GPIO22")
 		os.Exit(1)
 	}
 	mouth1, err = mustGetPin("23")
 	if err != nil {
-		fmt.Println("Failed to find GPIO23")
+		fmt.Println("failed to find GPIO23")
 		os.Exit(1)
 	}
 	mouth2, err = mustGetPin("24")
 	if err != nil {
-		fmt.Println("Failed to find GPIO24")
+		fmt.Println("failed to find GPIO24")
 		os.Exit(1)
 	}
 	tail1, err = mustGetPin("5")
 	if err != nil {
-		fmt.Println("Failed to find GPIO5")
+		fmt.Println("failed to find GPIO5")
 		os.Exit(1)
 	}
 	tail2, err = mustGetPin("6")
 	if err != nil {
-		fmt.Println("Failed to find GPIO6")
+		fmt.Println("failed to find GPIO6")
 		os.Exit(1)
 	}
 	if auth == "" {
@@ -375,18 +385,18 @@ func main() {
 
 	defer stopMotors()
 	if err := moveHeadOut(); err != nil {
-		fmt.Println("Failed to move head out:", err)
+		fmt.Println("failed to move head out:", err)
 		stopMotors()
 		os.Exit(1)
 	}
 	fmt.Print("moving head\n")
 	if err := recordAudio(); err != nil {
-		fmt.Println("Failed to record audio:", err)
+		fmt.Println("failed to record audio:", err)
 		stopMotors()
 		os.Exit(1)
 	}
 	if err := moveHeadIn(); err != nil {
-		fmt.Println("Failed to move head in:", err)
+		fmt.Println("failed to move head in:", err)
 		stopMotors()
 		os.Exit(1)
 	}
