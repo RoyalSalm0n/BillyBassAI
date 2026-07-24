@@ -105,6 +105,7 @@ func playaudio(done chan struct{}, file string, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	defer close(done)
 
+	fmt.Println("aplay starting at", time.Now())
 	fmt.Println("playing audio")
 	cmd := exec.Command("aplay", "-D", "plughw:0,0", file)
 
@@ -309,10 +310,11 @@ func syncMouth(done chan struct{}, file string, wg *sync.WaitGroup) error {
 		} else {
 			smoothedRMS = release*rms + (1-release)*smoothedRMS
 		}
-		threshold := 0.04
+		threshold := 0.1
 		timeline = append(timeline, mouthFrame{open: smoothedRMS > threshold})
 
 	}
+	fmt.Println("mouth timeline starting playback at", time.Now())
 	start := time.Now()
 	for {
 		select {
