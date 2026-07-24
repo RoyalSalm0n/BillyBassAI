@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-audio/wav"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/host/v3"
@@ -259,6 +261,97 @@ func moveHeadIn() error {
 	return nil
 }
 
+func syncMouth(done chan struct{}, file string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	if mouth1 == nil {
+		return fmt.Errorf("failed to find GPIO23")
+	}
+	if mouth2 == nil {
+		return fmt.Errorf("failed to find GPIO24")
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return fmt.Errorf("syncMouth: %w", err)
+	}
+	defer f.Close()
+	d := wav.NewDecoder(f)
+	buf, err := d.FullPCMBuffer()
+	if err != nil {
+		return fmt.Errorf("syncMouth: %w", err)
+	}
+	sampleRate := buf.Format.SampleRate
+	numChannels := buf.Format.NumChannels
+	windowMS := 50
+	windowSamples := (sampleRate * windowMS / 1000) * numChannels
+	type mouthFrame struct {
+		open bool
+	}
+	var timeline []mouthFrame
+	if windowSamples <= 0 {
+		return fmt.Errorf("syncMouth: invalid window size")
+	}
+	smoothedRMS := 0.0
+	attack := 0.4
+	release := 0.1
+	for i := 0; i < len(buf.Data); i += windowSamples {
+		end := i + windowSamples
+		if end > len(buf.Data) {
+			end = len(buf.Data)
+		}
+		var sumSQ float64
+		for _, s := range buf.Data[i:end] {
+			v := float64(s) / float64(1<<15)
+			sumSQ += v * v
+		}
+		rms := math.Sqrt(sumSQ / float64(end-i))
+		if rms > smoothedRMS {
+			smoothedRMS = attack*rms + (1-attack)*smoothedRMS
+		} else {
+			smoothedRMS = release*rms + (1-release)*smoothedRMS
+		}
+		threshold := 0.04
+		timeline = append(timeline, mouthFrame{open: smoothedRMS > threshold})
+
+	}
+	start := time.Now()
+	for {
+		select {
+		case _, ok := <-done:
+			if !ok {
+				mouth1.Out(gpio.Low)
+				mouth2.Out(gpio.Low)
+				return nil
+			}
+		default:
+			elapsed := time.Since(start)
+			idx := int(elapsed.Milliseconds()) / windowMS
+			if idx >= len(timeline) {
+				mouth1.Out(gpio.Low)
+				mouth2.Out(gpio.Low)
+				return nil
+			}
+			if timeline[idx].open {
+				if err := mouth1.Out(gpio.High); err != nil {
+					return fmt.Errorf("moveMouth: %w", err)
+				}
+				if err := mouth2.Out(gpio.Low); err != nil {
+					return fmt.Errorf("moveMouth: %w", err)
+				}
+			} else {
+				if err := mouth1.Out(gpio.Low); err != nil {
+					return fmt.Errorf("moveMouth: %w", err)
+				}
+				if err := mouth2.Out(gpio.High); err != nil {
+					return fmt.Errorf("moveMouth: %w", err)
+				}
+			}
+			fmt.Printf("Window %d: Mouth open: %v\n", idx, timeline[idx].open)
+			time.Sleep(time.Duration(windowMS) * time.Millisecond)
+		}
+	}
+
+}
+
 func moveMouth(done chan struct{}, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	for {
@@ -423,7 +516,7 @@ func main() {
 		errCh <- playaudio(done, outputPath, &wg)
 	}()
 	go func() {
-		errCh <- moveMouth(done, &wg)
+		errCh <- syncMouth(done, outputPath, &wg)
 	}()
 	go func() {
 		errCh <- moveTail(done, &wg)
