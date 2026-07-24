@@ -42,6 +42,10 @@ var client = &http.Client{
 	Timeout: 90 * time.Second,
 }
 
+type mouthFrame struct {
+	open bool
+}
+
 // record the audio being asked by billy
 func recordAudio() error {
 
@@ -262,34 +266,24 @@ func moveHeadIn() error {
 	return nil
 }
 
-func syncMouth(done chan struct{}, file string, wg *sync.WaitGroup) error {
-	defer wg.Done()
-	if mouth1 == nil {
-		return fmt.Errorf("failed to find GPIO23")
-	}
-	if mouth2 == nil {
-		return fmt.Errorf("failed to find GPIO24")
-	}
+func computeMouthTineline(file string) ([]mouthFrame, int, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		return fmt.Errorf("syncMouth: %w", err)
+		return nil, 0, fmt.Errorf("computeMouthTineline: %w", err)
 	}
 	defer f.Close()
 	d := wav.NewDecoder(f)
 	buf, err := d.FullPCMBuffer()
 	if err != nil {
-		return fmt.Errorf("syncMouth: %w", err)
+		return nil, 0, fmt.Errorf("computeMouthTineline: %w", err)
 	}
 	sampleRate := buf.Format.SampleRate
 	numChannels := buf.Format.NumChannels
 	windowMS := 50
 	windowSamples := (sampleRate * windowMS / 1000) * numChannels
-	type mouthFrame struct {
-		open bool
-	}
 	var timeline []mouthFrame
 	if windowSamples <= 0 {
-		return fmt.Errorf("syncMouth: invalid window size")
+		return nil, 0, fmt.Errorf("computeMouthTineline: invalid window size")
 	}
 	smoothedRMS := 0.0
 	attack := 0.4
@@ -312,7 +306,17 @@ func syncMouth(done chan struct{}, file string, wg *sync.WaitGroup) error {
 		}
 		threshold := 0.1
 		timeline = append(timeline, mouthFrame{open: smoothedRMS > threshold})
+	}
+	return timeline, windowMS, nil
+}
 
+func syncMouth(done chan struct{}, windowMS int, wg *sync.WaitGroup, timeline []mouthFrame) error {
+	defer wg.Done()
+	if mouth1 == nil {
+		return fmt.Errorf("failed to find GPIO23")
+	}
+	if mouth2 == nil {
+		return fmt.Errorf("failed to find GPIO24")
 	}
 	fmt.Println("mouth timeline starting playback at", time.Now())
 	start := time.Now()
@@ -511,6 +515,11 @@ func main() {
 		fmt.Println("Failed to generate speech:", err)
 		os.Exit(1)
 	}
+	timeline, windowMS, err := computeMouthTineline(outputPath)
+	if err != nil {
+		fmt.Println("Failed to compute mouth timeline:", err)
+		os.Exit(1)
+	}
 	done := make(chan struct{})
 	errCh := make(chan error, 3)
 	wg.Add(3)
@@ -518,7 +527,7 @@ func main() {
 		errCh <- playaudio(done, outputPath, &wg)
 	}()
 	go func() {
-		errCh <- syncMouth(done, outputPath, &wg)
+		errCh <- syncMouth(done, windowMS, &wg, timeline)
 	}()
 	go func() {
 		errCh <- moveTail(done, &wg)
