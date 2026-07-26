@@ -1,5 +1,4 @@
-from flask import Flask, request, jsonify, send_file
-import whisper
+from flask import Flask, request, jsonify, send_file,after_this_request
 import tempfile
 import requests
 from faster_whisper import WhisperModel
@@ -10,14 +9,15 @@ from google.genai import types
 import configparser
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
-from elevenlabs import play
 import os
 from pydub import AudioSegment
 import re
 from functools import wraps
+import hmac
 
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 wModel = WhisperModel("small")
 pModel = "/app/models/norman.onnx"
 pVoice = PiperVoice.load(pModel)
@@ -26,13 +26,15 @@ elevenlabs = ElevenLabs(
   api_key=os.getenv("ELEVENLABS_API_KEY"),
 )
 API_KEY=os.getenv("API_KEY")
+if not API_KEY:
+    raise ValueError("API_KEY not set in environment variables")
 external = False
 
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer ") or auth_header[7:] != API_KEY:
+        if not auth_header.startswith("Bearer ") or not hmac.compare_digest(auth_header[7:], API_KEY):
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
@@ -59,10 +61,12 @@ def transcribe():
     with tempfile.NamedTemporaryFile(delete=True,suffix=suffix) as temp_file:
         audio_file.save(temp_file.name)
         if not external:
+            print(f"Transcribing {temp_file.name} with Whisper")
             segments, info = wModel.transcribe(temp_file.name)
             segments = list(segments)
             result = " ".join(x.text for x in segments)
         else:
+            print(f"Transcribing {temp_file.name} with Gemini")
             client = genai.Client()
             mime = "audio/wav" if suffix == ".wav" else "audio/mpeg" if suffix == ".mp3" else "audio/mp4"
             myfile = client.files.upload(file=temp_file.name,config={"mime_type": mime})
@@ -112,6 +116,7 @@ def ai():
     except Exception as e:
     	print(f"Gemini failed: {e}")
     try:
+        print(f"Sending prompt to local model: {prompt}")
     	Localresponse = requests.post(Localurl, headers=Localheader, json={
         	"prompt": prompt,
         	"model": "phi3",
@@ -135,7 +140,15 @@ def tts():
     inputText = request_data.get("text")
     if not inputText:
         return jsonify({"error": "No data provided"}), 400
-    output_path = "/app/output/output.wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        temp_path = temp_file.name
+    @after_this_request
+    def cleanup(response):
+        try:
+            os.remove(temp_path)
+        except Exception as e:
+            print(f"Error deleting temporary file: {e}")
+        return response
     try:
         audio = elevenlabs.text_to_speech.convert(
             text=inputText,
@@ -143,18 +156,18 @@ def tts():
             model_id="eleven_multilingual_v2"
         )
         audio_bytes = b"".join(audio)
-        with open(output_path, "wb") as wav_file:
+        with open(temp_path, "wb") as wav_file:
             wav_file.write(audio_bytes)
-        sound = AudioSegment.from_mp3(output_path)
-        sound.export(output_path,format="wav")
-        with wave.open(output_path,"rb") as f:
-              f.getparams()
-        return send_file(output_path, mimetype='audio/wav',as_attachment=False)
+        sound = AudioSegment.from_mp3(temp_path)
+        sound.export(temp_path,format="wav")
+        with wave.open(temp_path,"rb") as f:
+            f.getparams()
+        return send_file(temp_path, mimetype='audio/wav',as_attachment=False)
     except Exception as e:
         print(f"ElevenLabs failed {e}")
-    with wave.open(output_path,"wb") as wav_file:
+    with wave.open(temp_path,"wb") as wav_file:
         pVoice.synthesize_wav(inputText,wav_file)
-    return send_file(output_path, mimetype='audio/wav',as_attachment=False)
+    return send_file(temp_path, mimetype='audio/wav',as_attachment=False)
 
 if __name__ == '__main__':
     app.debug = False
